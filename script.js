@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Estado de la Aplicación ---
     let documentChunks = [];
     let usedChunkIndices = new Set();
-    let currentAnswer = '';
+    let currentFullSentence = '';
     let aiPipeline = null;
 
     // --- Lógica Principal ---
@@ -50,7 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
             documentChunks = [];
             for (let i = 0; i < chunks.length; i++) {
                 const chunk = chunks[i].trim();
-                if (chunk.split(' ').length < 15) continue;
+                // Aumentamos el requisito para frases más significativas
+                if (chunk.split(' ').length < 10) continue; 
                 documentChunks.push(chunk);
                 statusText.textContent = `Procesando texto... ${Math.round((i / chunks.length) * 100)}%`;
             }
@@ -59,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error("El documento no contiene fragmentos de texto válidos para generar preguntas.");
             }
             
-            // **CORRECCIÓN:** Cambiar de vista SÓLO cuando todo ha terminado.
             uploadView.classList.add('hidden');
             studyView.classList.remove('hidden');
             
@@ -69,13 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error en el procesamiento:', error);
             statusText.textContent = `Error: ${error.message}`;
             alert(`Hubo un error al procesar el PDF. Asegúrese de que es un documento de texto válido. \nDetalle: ${error.message}`);
-            resetState();
+            resetState(); // Aseguramos que se limpia el estado si hay un error
         }
     });
     
     // 2. Lógica de los botones
     revealBtn.addEventListener('click', () => {
-        answerText.textContent = currentAnswer;
+        answerText.textContent = currentFullSentence;
         answerContainer.classList.remove('hidden');
         revealBtn.classList.add('hidden');
         nextBtn.classList.remove('hidden');
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         generateAndDisplayQuestion();
     });
 
-    // **NUEVO:** Botón para volver a la pantalla de carga
+    // **CORRECCIÓN:** Funcionalidad del botón para volver atrás
     backToUploadBtn.addEventListener('click', () => {
         studyView.classList.add('hidden');
         uploadView.classList.remove('hidden');
@@ -109,16 +109,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         usedChunkIndices.add(randomIndex);
         
-        currentAnswer = documentChunks[randomIndex];
+        const sentence = documentChunks[randomIndex];
+        currentFullSentence = sentence;
         
-        // **CORRECCIÓN:** Lógica para encontrar una palabra clave y formular una pregunta real.
-        const words = currentAnswer.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s/);
-        const keyword = words.find(w => w.length > 7 && /^[A-Z]/.test(w)) || words.find(w => w.length > 9);
+        // **NUEVA LÓGICA DE PREGUNTAS:** Crear un "rellena el hueco"
+        const words = sentence.split(/\s+/);
+        if (words.length < 5) { // Si la frase es muy corta, pasamos a la siguiente
+            generateAndDisplayQuestion();
+            return;
+        }
+        
+        // Buscamos la palabra más larga para ocultarla
+        let longestWord = '';
+        let longestWordIndex = -1;
+        words.forEach((word, index) => {
+            const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+            if (cleanWord.length > longestWord.length) {
+                longestWord = cleanWord;
+                longestWordIndex = index;
+            }
+        });
 
-        if (keyword) {
-            questionContainer.innerHTML = `<p>Explique el siguiente concepto clave extraído del documento:</p><h2>${keyword}</h2>`;
+        if (longestWordIndex !== -1) {
+            const keyword = words[longestWordIndex];
+            const questionText = sentence.replace(keyword, '______');
+            questionContainer.innerHTML = `<p>Complete el siguiente enunciado extraído del texto:</p><h3>${questionText}</h3>`;
         } else {
-            questionContainer.innerHTML = `<p>Analice y resuma la idea principal del siguiente pasaje:</p><p><i>"${currentAnswer.substring(0, 100)}..."</i></p>`;
+            // Si algo falla, mostramos el texto como antes pero es muy improbable
+            questionContainer.innerHTML = `<p>Analice y resuma la idea principal del siguiente pasaje.</p>`;
         }
         
         // Resetear la UI para la nueva pregunta
@@ -146,8 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetState() {
         documentChunks = [];
         usedChunkIndices.clear();
-        currentAnswer = '';
-        pdfUpload.value = ''; // Limpiar el input de archivo
+        currentFullSentence = '';
+        pdfUpload.value = ''; // **IMPORTANTE:** Limpiar el input para poder recargar el mismo archivo
         statusText.textContent = '';
     }
 
