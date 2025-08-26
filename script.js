@@ -14,18 +14,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-checkbox');
 
     // --- Estado de la Aplicación ---
-    let documentChunks = [];
-    let usedChunkIndices = new Set();
-    let currentFullSentence = '';
-    let aiPipeline = null;
+    let structuredContent = []; // NUEVO: Ya no son frases sueltas, son objetos con estructura
+    let usedContentIndices = new Set();
+    let currentAnswer = '';
+    let aiPipeline = null; // Mantenemos la IA para futuras mejoras, aunque no se usa activamente ahora
 
     // --- Lógica Principal ---
-
-    // 1. Procesamiento del PDF
     pdfUpload.addEventListener('change', async (event) => {
         const file = event.target.files[0];
         if (!file) return;
-
         resetState();
         documentTitle.textContent = `Sesión de Estudio: ${file.name}`;
 
@@ -33,59 +30,52 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText.textContent = 'Extrayendo texto del PDF...';
             const pdfText = await readPdf(file);
             
-            statusText.textContent = 'Analizando y fragmentando el contenido...';
-            const chunks = pdfText.match(/[^.!?\n]+[.!?\n]+/g) || [];
+            statusText.textContent = 'Analizando estructura del documento...';
+            
+            // **NUEVA LÓGICA DE PROCESAMIENTO ESTRUCTURAL**
+            structuredContent = parseTextToStructure(pdfText);
 
-            if (!aiPipeline) {
-                statusText.textContent = 'Cargando modelo de IA (sólo la primera vez)...';
-                aiPipeline = await window.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-                    progress_callback: data => {
-                        if (data.status === 'progress') {
-                            statusText.textContent = `Descargando modelo... ${Math.round(data.progress)}%`;
-                        }
-                    }
-                });
-            }
-
-            documentChunks = [];
-            for (let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i].trim();
-                // Aumentamos el requisito para frases más significativas
-                if (chunk.split(' ').length < 10) continue; 
-                documentChunks.push(chunk);
-                statusText.textContent = `Procesando texto... ${Math.round((i / chunks.length) * 100)}%`;
-            }
-
-            if (documentChunks.length === 0) {
-                throw new Error("El documento no contiene fragmentos de texto válidos para generar preguntas.");
+            if (structuredContent.length === 0) {
+                throw new Error("No se pudo identificar una estructura de Títulos o Artículos en el documento.");
             }
             
             uploadView.classList.add('hidden');
             studyView.classList.remove('hidden');
-            
             generateAndDisplayQuestion();
 
         } catch (error) {
             console.error('Error en el procesamiento:', error);
             statusText.textContent = `Error: ${error.message}`;
-            alert(`Hubo un error al procesar el PDF. Asegúrese de que es un documento de texto válido. \nDetalle: ${error.message}`);
-            resetState(); // Aseguramos que se limpia el estado si hay un error
+            alert(`Hubo un error al procesar el PDF. \nDetalle: ${error.message}`);
+            resetState();
         }
     });
+
+    function parseTextToStructure(text) {
+        const content = [];
+        // Expresión regular para encontrar Títulos, Capítulos o Artículos.
+        const regex = /^(Título\s+[IVXLCDM]+|Capítulo\s+[IVXLCDM\d]+|Artículo\s+\d+)/gim;
+        const sections = text.split(regex).filter(s => s.trim() !== '');
+
+        for (let i = 0; i < sections.length; i += 2) {
+            if (sections[i] && sections[i+1]) {
+                content.push({
+                    title: sections[i].trim(),
+                    text: sections[i+1].trim()
+                });
+            }
+        }
+        return content;
+    }
     
-    // 2. Lógica de los botones
+    // --- Lógica de los botones (sin cambios) ---
     revealBtn.addEventListener('click', () => {
-        answerText.textContent = currentFullSentence;
+        answerText.textContent = currentAnswer;
         answerContainer.classList.remove('hidden');
         revealBtn.classList.add('hidden');
         nextBtn.classList.remove('hidden');
     });
-
-    nextBtn.addEventListener('click', () => {
-        generateAndDisplayQuestion();
-    });
-
-    // **CORRECCIÓN:** Funcionalidad del botón para volver atrás
+    nextBtn.addEventListener('click', () => generateAndDisplayQuestion());
     backToUploadBtn.addEventListener('click', () => {
         studyView.classList.add('hidden');
         uploadView.classList.remove('hidden');
@@ -95,8 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Funciones Auxiliares ---
 
     function generateAndDisplayQuestion() {
-        if (usedChunkIndices.size >= documentChunks.length) {
-            questionContainer.innerHTML = `<p>Ha completado todos los conceptos del documento. ¡Excelente trabajo!</p>`;
+        if (usedContentIndices.size >= structuredContent.length) {
+            questionContainer.innerHTML = `<p>Ha completado todas las secciones del documento. ¡Excelente trabajo!</p>`;
             revealBtn.classList.add('hidden');
             nextBtn.classList.add('hidden');
             return;
@@ -104,40 +94,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let randomIndex;
         do {
-            randomIndex = Math.floor(Math.random() * documentChunks.length);
-        } while (usedChunkIndices.has(randomIndex));
+            randomIndex = Math.floor(Math.random() * structuredContent.length);
+        } while (usedContentIndices.has(randomIndex));
 
-        usedChunkIndices.add(randomIndex);
+        usedContentIndices.add(randomIndex);
         
-        const sentence = documentChunks[randomIndex];
-        currentFullSentence = sentence;
+        const section = structuredContent[randomIndex];
+        currentAnswer = section.text;
         
-        // **NUEVA LÓGICA DE PREGUNTAS:** Crear un "rellena el hueco"
-        const words = sentence.split(/\s+/);
-        if (words.length < 5) { // Si la frase es muy corta, pasamos a la siguiente
-            generateAndDisplayQuestion();
-            return;
-        }
-        
-        // Buscamos la palabra más larga para ocultarla
-        let longestWord = '';
-        let longestWordIndex = -1;
-        words.forEach((word, index) => {
-            const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-            if (cleanWord.length > longestWord.length) {
-                longestWord = cleanWord;
-                longestWordIndex = index;
-            }
-        });
-
-        if (longestWordIndex !== -1) {
-            const keyword = words[longestWordIndex];
-            const questionText = sentence.replace(keyword, '______');
-            questionContainer.innerHTML = `<p>Complete el siguiente enunciado extraído del texto:</p><h3>${questionText}</h3>`;
-        } else {
-            // Si algo falla, mostramos el texto como antes pero es muy improbable
-            questionContainer.innerHTML = `<p>Analice y resuma la idea principal del siguiente pasaje.</p>`;
-        }
+        // **NUEVA LÓGICA DE PREGUNTAS CONCEPTUALES**
+        const questionPrompt = `¿Qué establece o de qué trata el siguiente apartado?`;
+        questionContainer.innerHTML = `<p>${questionPrompt}</p><h2>${section.title}</h2>`;
         
         // Resetear la UI para la nueva pregunta
         answerContainer.classList.add('hidden');
@@ -149,32 +116,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function readPdf(file) {
         const pdfjsLib = window['pdfjs-dist/build/pdf'];
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
-        
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
         let fullText = '';
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+            // Unimos los items con un espacio y añadimos un salto de línea por página.
+            fullText += textContent.items.map(item => item.str).join(' ') + '\n\n';
         }
         return fullText;
     }
 
     function resetState() {
-        documentChunks = [];
-        usedChunkIndices.clear();
-        currentFullSentence = '';
-        pdfUpload.value = ''; // **IMPORTANTE:** Limpiar el input para poder recargar el mismo archivo
+        structuredContent = [];
+        usedContentIndices.clear();
+        currentAnswer = '';
+        pdfUpload.value = '';
         statusText.textContent = '';
     }
 
-    // --- Gestión del Tema (Claro/Oscuro) ---
+    // --- Gestión del Tema (sin cambios) ---
     themeToggle.addEventListener('change', (e) => {
         document.body.classList.toggle('dark-mode', e.target.checked);
         localStorage.setItem('theme', e.target.checked ? 'dark' : 'light');
     });
-
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
         document.body.classList.add('dark-mode');
