@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const answerText = document.getElementById('answer-text');
     const revealBtn = document.getElementById('reveal-btn');
     const nextBtn = document.getElementById('next-btn');
+    const backToUploadBtn = document.getElementById('back-to-upload-btn');
     const themeToggle = document.getElementById('theme-checkbox');
 
     // --- Estado de la Aplicación ---
@@ -18,17 +19,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentAnswer = '';
     let aiPipeline = null;
 
-    // --- Inicialización y Lógica Principal ---
+    // --- Lógica Principal ---
 
-    // 1. Procesamiento del PDF al seleccionar archivo
+    // 1. Procesamiento del PDF
     pdfUpload.addEventListener('change', async (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
         resetState();
         documentTitle.textContent = `Sesión de Estudio: ${file.name}`;
-        uploadView.classList.add('hidden');
-        studyView.classList.remove('hidden');
 
         try {
             statusText.textContent = 'Extrayendo texto del PDF...';
@@ -51,22 +50,18 @@ document.addEventListener('DOMContentLoaded', () => {
             documentChunks = [];
             for (let i = 0; i < chunks.length; i++) {
                 const chunk = chunks[i].trim();
-                // Omitir fragmentos muy cortos que no aportan valor
-                if (chunk.split(' ').length < 15) continue; 
-                
-                // No generamos embeddings aquí para agilizar, lo haremos bajo demanda si es necesario
-                // para una lógica más compleja en el futuro.
+                if (chunk.split(' ').length < 15) continue;
                 documentChunks.push(chunk);
                 statusText.textContent = `Procesando texto... ${Math.round((i / chunks.length) * 100)}%`;
             }
 
             if (documentChunks.length === 0) {
-                throw new Error("El documento no contiene fragmentos de texto suficientemente largos para generar preguntas.");
+                throw new Error("El documento no contiene fragmentos de texto válidos para generar preguntas.");
             }
-
-            statusText.textContent = `¡Documento procesado! ${documentChunks.length} fragmentos listos para el estudio.`;
-            // Ocultar el status text de la vista de estudio
-            document.querySelector('#study-view .status-text')?.remove();
+            
+            // **CORRECCIÓN:** Cambiar de vista SÓLO cuando todo ha terminado.
+            uploadView.classList.add('hidden');
+            studyView.classList.remove('hidden');
             
             generateAndDisplayQuestion();
 
@@ -74,13 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error en el procesamiento:', error);
             statusText.textContent = `Error: ${error.message}`;
             alert(`Hubo un error al procesar el PDF. Asegúrese de que es un documento de texto válido. \nDetalle: ${error.message}`);
-            // Volver a la vista principal
-            uploadView.classList.remove('hidden');
-            studyView.classList.add('hidden');
+            resetState();
         }
     });
     
-    // 2. Lógica de los botones de control
+    // 2. Lógica de los botones
     revealBtn.addEventListener('click', () => {
         answerText.textContent = currentAnswer;
         answerContainer.classList.remove('hidden');
@@ -90,6 +83,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     nextBtn.addEventListener('click', () => {
         generateAndDisplayQuestion();
+    });
+
+    // **NUEVO:** Botón para volver a la pantalla de carga
+    backToUploadBtn.addEventListener('click', () => {
+        studyView.classList.add('hidden');
+        uploadView.classList.remove('hidden');
+        resetState();
     });
 
     // --- Funciones Auxiliares ---
@@ -110,8 +110,16 @@ document.addEventListener('DOMContentLoaded', () => {
         usedChunkIndices.add(randomIndex);
         
         currentAnswer = documentChunks[randomIndex];
-        // En esta versión, la "pregunta" es una invitación a recordar el contenido del fragmento.
-        questionContainer.innerHTML = `<p>Por favor, explique o resuma el concepto principal relacionado con el siguiente pasaje clave del texto. Una vez formulada su respuesta, presione "Revelar Respuesta" para comparar.</p>`;
+        
+        // **CORRECCIÓN:** Lógica para encontrar una palabra clave y formular una pregunta real.
+        const words = currentAnswer.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s/);
+        const keyword = words.find(w => w.length > 7 && /^[A-Z]/.test(w)) || words.find(w => w.length > 9);
+
+        if (keyword) {
+            questionContainer.innerHTML = `<p>Explique el siguiente concepto clave extraído del documento:</p><h2>${keyword}</h2>`;
+        } else {
+            questionContainer.innerHTML = `<p>Analice y resuma la idea principal del siguiente pasaje:</p><p><i>"${currentAnswer.substring(0, 100)}..."</i></p>`;
+        }
         
         // Resetear la UI para la nueva pregunta
         answerContainer.classList.add('hidden');
@@ -139,6 +147,8 @@ document.addEventListener('DOMContentLoaded', () => {
         documentChunks = [];
         usedChunkIndices.clear();
         currentAnswer = '';
+        pdfUpload.value = ''; // Limpiar el input de archivo
+        statusText.textContent = '';
     }
 
     // --- Gestión del Tema (Claro/Oscuro) ---
