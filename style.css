@@ -135,3 +135,15 @@ input:checked + .slider { background-color: var(--primary-color); }
 .slider.round { border-radius: 34px; }
 .slider.round:before { border-radius: 50%; }
 input:checked + .slider:before { transform: translateX(26px); }
+
+/* Añadir al final del archivo style.css */
+.action-button.secondary {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.action-button.secondary:hover {
+    background-color: var(--shadow-color);
+}
+
