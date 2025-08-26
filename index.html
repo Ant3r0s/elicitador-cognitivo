@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elicitador Cognitivo</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script type="module">
+        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+        window.pipeline = pipeline;
+    </script>
+</head>
+<body>
+    <div class="theme-switch-wrapper">
+        <label class="theme-switch" for="theme-checkbox">
+            <input type="checkbox" id="theme-checkbox" />
+            <div class="slider round"></div>
+        </label>
+    </div>
+
+    <main class="container">
+        <section id="upload-view" class="card">
+            <header>
+                <h1>Elicitador Cognitivo</h1>
+                <p class="subtitle">Una herramienta de estudio para la autoevaluación mediante recuerdo activo.</p>
+            </header>
+            <div class="upload-container">
+                <input type="file" id="pdf-upload" accept=".pdf" class="hidden">
+                <label for="pdf-upload" class="action-button">Seleccionar Documento PDF</label>
+            </div>
+            <div id="status-text" class="status-text"></div>
+        </section>
+
+        <section id="study-view" class="card hidden">
+            <h2 id="document-title">Sesión de Estudio</h2>
+            <div id="question-container" class="content-box">
+                <p>Cargando pregunta...</p>
+            </div>
+            <div id="answer-container" class="content-box hidden">
+                <h3>Respuesta Extraída del Documento:</h3>
+                <p id="answer-text"></p>
+            </div>
+            <div class="controls">
+                <button id="reveal-btn" class="action-button">Revelar Respuesta</button>
+                <button id="next-btn" class="action-button hidden">Siguiente Pregunta</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js" type="module"></script>
+</body>
+</html>
